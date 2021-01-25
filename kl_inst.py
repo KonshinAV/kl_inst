@@ -8,6 +8,11 @@ import time
 from sqlite3 import Connection, Cursor
 from pprint import pprint
 
+
+def get_win32object_info_wmi(select_body):
+    w = wmi.WMI()
+    return w.query(select_body) if select_body else False
+
 class Computer:
     def __init__(self):
         self.hostname = socket.gethostname()
@@ -15,6 +20,65 @@ class Computer:
         self.services = self.get_services()
         self.software = self.get_software()
         self.netadapters = self.get_netadapters()
+
+        # Set NetAdapterSettings
+        self.net_DNSDomainSuffixSearchOrder = False
+        self.net_DefaultIPGateway = False
+        self.net_DNSServerSearchOrder = False
+        self.net_DHCPEnabled = False
+        self.net_IPAddress = False
+        self.net_IPSubnet = False
+        self.net_MACAddress = False
+
+        for adapter in self.netadapters:
+            if adapter.DNSDomainSuffixSearchOrder:
+                self.net_DNSDomainSuffixSearchOrder = adapter.DNSDomainSuffixSearchOrder
+                self.net_DefaultIPGateway = adapter.DefaultIPGateway
+                self.net_DNSServerSearchOrder = adapter.DNSServerSearchOrder
+                self.net_DHCPEnabled = adapter.DHCPEnabled
+                self.net_IPAddress = adapter.IPAddress
+                self.net_IPSubnet = adapter.IPSubnet
+                self.net_MACAddress = adapter.MACAddress
+                break
+
+        # Set Nagent Settings
+        self.nagent_service_Name = False
+        self.nagent_service_DisplayName = False
+        self.nagent_service_ProcessId = False
+        self.nagent_service_State = False
+        self.nagent_service_Caption = False
+        for service in self.services:
+            if service.Name == 'klnagent':
+                self.nagent_service_Name = service.Name
+                self.nagent_service_DisplayName = service.DisplayName
+                self.nagent_service_ProcessId = service.ProcessId
+                self.nagent_service_State = service.State
+                self.nagent_service_Caption = service.Caption
+                # print(service)
+                break
+
+        self.nagent_InstallSource = False
+        self.nagent_IdentifyingNumber = False
+        self.nagent_InstallDate = False
+        self.nagent_PackageName = False
+        self.nagent_PackageCode = False
+        self.nagent_LocalPackage = False
+        if self.nagent_service_ProcessId:
+            for soft in self.software:
+                if self.nagent_service_Caption == soft.Caption:
+                    self.nagent_InstallSource = soft.InstallSource
+                    self.nagent_IdentifyingNumber = soft.IdentifyingNumber
+                    self.nagent_InstallDate = soft.InstallDate
+                    self.nagent_PackageName = soft.PackageName
+                    self.nagent_PackageCode = soft.PackageCode
+                    self.nagent_LocalPackage = soft.LocalPackage
+                    break
+
+        # Set AV Settings
+        self.av_Installed = False
+        if self.nagent_service_ProcessId:
+            self.av_Installed = bool(self.get_winreg_key(reg_path='SOFTWARE\\WOW6432Node\\KasperskyLab\\Components\\34\\1103\\1.0.0.0\\Statistics\\AVState',
+                                          reg_key='Protection_AvInstalled'))
 
     def get_services (self, update_in_properties = True):
         """
@@ -225,30 +289,51 @@ class Computer:
             return self.netadapters
         else:
             return get_win32object_info_wmi(select_body = query)
-
+    def get_winreg_key (self, reg_path, reg_key):
+        try:
+            registry_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,reg_path,0,winreg.KEY_READ)
+            reg_key_value, reg_type = winreg.QueryValueEx(registry_key,reg_key)
+            winreg.CloseKey(registry_key)
+            return str(reg_key_value).lower()
+        except WindowsError as ex:
+            return False
 
 class ActiveDirectory:
     def __init__(self, dc_server, user, password, auto_connect = True):
         self.dc_server = dc_server
         self.user = user
         self.password = password
+
+    def test_connection (self):
+        pass
+
+    def get_ad_attrs (self):
         pass
 
 
-class Package:
+class InstPackage:
     def __init__(self):
         pass
 
     def install (self):
         pass
 
+    def uninstall (self):
+        pass
 
-def get_win32object_info_wmi (select_body):
-    w = wmi.WMI()
-    return w.query(select_body) if select_body else False
+    def reinstall (self):
+        pass
 
-def main ():
+
+def data_collector (GLOBAL_DATA):
+    # Create Computer object
     this_pc = Computer()
+    print(this_pc.nagent_InstallSource, this_pc.nagent_PackageName, this_pc.nagent_InstallDate)
+    print(this_pc.av_Installed)
+    # print (this_pc.nagent_service_ProcessId)
 
 if __name__ == '__main__':
-    main()
+    GLOBAL_DATA = {'domain':'abc.local',
+                   'nagent_inst_path': '',
+                   'av_inst_path':''}
+    data_collector(GLOBAL_DATA)
